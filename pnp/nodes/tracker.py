@@ -19,23 +19,35 @@ class Tracker:
             Image,
             self.callback)
 
+    def histogram(self, src):
+        h = np.zeros((300,256,1))
+        bins = np.arange(256).reshape(256,1)
+        hist_item = cv2.calcHist([np.asarray(src)],[0],None,[256],[0,255])
+        cv2.normalize(hist_item,hist_item,0,255,cv2.NORM_MINMAX)
+        hist=np.int32(np.around(hist_item))
+        pts = np.column_stack((bins,hist))
+        cv2.polylines(h,[pts],False,(255,255,255))
+        h=np.flipud(h)
+        return h
+
+    def thresholded(self, image):
+        return cv2.adaptiveThreshold(
+            np.asarray(image),
+            255,
+            cv.CV_ADAPTIVE_THRESH_GAUSSIAN_C,
+            cv.CV_THRESH_BINARY,
+            55,
+            -10)
+
     def callback(self,data):
         try:
             cv_image = self.bridge.imgmsg_to_cv(data, "mono8")
         except CvBridgeError, e:
             print e
 
-        h = np.zeros((300,256,1))
-        bins = np.arange(256).reshape(256,1)
-        hist_item = cv2.calcHist([np.asarray(cv_image)],[0],None,[256],[0,255])
-        cv2.normalize(hist_item,hist_item,0,255,cv2.NORM_MINMAX)
-        hist=np.int32(np.around(hist_item))
-        pts = np.column_stack((bins,hist))
-        cv2.polylines(h,[pts],False,(255,255,255))
-        h=np.flipud(h)
-
-        cv2.imshow("Histogram",h)
-        cv.ShowImage("Image window", cv_image)
+        cv.ShowImage("original", cv_image)
+        cv2.imshow("histogram", self.histogram(cv_image))
+        cv2.imshow("thresholded", self.thresholded(cv_image))
         # cv.WaitKey(1)
         cv2.waitKey(1)
 
