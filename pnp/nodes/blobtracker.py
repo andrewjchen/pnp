@@ -6,10 +6,8 @@ import cv
 from std_msgs.msg import String
 from sensor_msgs.msg import Image
 from cv_bridge import CvBridge, CvBridgeError
-
 import cv2
 import numpy as np
-
 import math
 
 class Blobtracker:
@@ -20,6 +18,9 @@ class Blobtracker:
             "/camera/image_raw",
             Image,
             self.callback)
+        self.grey = (200,200,200)
+        self.tgrey = (127,127,127)
+
 
     def callback(self,data):
         try:
@@ -27,10 +28,10 @@ class Blobtracker:
         except CvBridgeError, e:
             print e
 
-        # cv2.imshow("original", cv_image)
         blurred = cv2.GaussianBlur(np.asarray(cv_image), (5,5), 3)
         retval, thresh = cv2.threshold(blurred, 80, 255, cv2.THRESH_BINARY_INV)
 
+        imageColor = cv2.cvtColor(np.asarray(cv_image), cv.CV_GRAY2BGR)
         thresh2 = thresh.copy()
         contours,hierarchy = cv2.findContours(thresh2,cv2.RETR_LIST,cv2.CHAIN_APPROX_SIMPLE)
         if len(contours) > 0:
@@ -44,9 +45,13 @@ class Blobtracker:
             M = cv2.moments(best_cnt)
             cx,cy = int(M['m10']/M['m00']), int(M['m01']/M['m00'])
             print cx, cy
-            cv2.circle(thresh,(cx,cy), 5, 0,-1)
-        cv2.imshow("thresh", thresh)
-        cv.ShowImage("original", cv_image)
+            cv2.circle(imageColor,(cx,cy), 5, (255,0,0),-1)
+            cv2.line(imageColor, (cx, 0), (cx, 480), self.tgrey)
+            cv2.line(imageColor, (0, cy), (640, cy), self.tgrey)
+            
+        cv2.line(imageColor, (320, 0), (320, 480), self.grey)
+        cv2.line(imageColor, (0, 240), (640, 240), self.grey)
+        cv2.imshow("result", imageColor)
         cv2.waitKey(1)
 
 def main(args):
