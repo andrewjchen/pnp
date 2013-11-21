@@ -13,6 +13,8 @@ import serial
 import time
 import timeit
 import thread
+import showdata as sm
+
 class Driver:
     def __init__(self):
         print('opening device...')
@@ -59,6 +61,9 @@ class Blobtracker:
         self.cy = 240
         self.cx0 = 320
         self.cy0 = 240
+        self.analogData = sm.AnalogData(100)
+        self.analogPlot = sm.AnalogPlot(self.analogData)
+        self.val = 0
 
 
     def callback(self,data):
@@ -82,21 +87,16 @@ class Blobtracker:
                     max_area = area
                     best_cnt = cnt
             M = cv2.moments(best_cnt)
-            cx,cy = int(M['m10']/M['m00']), int(M['m01']/M['m00'])
-            # print cx, cy
-            cv2.circle(imageColor,(cx,cy), 5, (255,0,0),-1)
-            cv2.line(imageColor, (cx, 0), (cx, 480), self.tgrey)
-            cv2.line(imageColor, (0, cy), (640, cy), self.tgrey)
-            self.cx0 = self.cx
-            self.cy0 = self.cy
-            self.cx = cx
-            self.cy = cy
-            diffx = self.cx - self.cx0
-            diffy = self.cy - self.cy0
-            if(np.abs(diffx) > 50 or np.abs(diffy) > 50):
-                print str(diffx) + "\t" + str (diffy)
-
-            
+            if M['m00'] > 3000:
+                print M['m00']
+                cx,cy = int(M['m10']/M['m00']), int(M['m01']/M['m00'])
+                cv2.circle(imageColor,(cx,cy), 5, (255,0,0),-1)
+                cv2.line(imageColor, (cx, 0), (cx, 480), self.tgrey)
+                cv2.line(imageColor, (0, cy), (640, cy), self.tgrey)
+                self.cx0 = self.cx
+                self.cy0 = self.cy
+                self.cx = cx
+                self.cy = cy
             
         cv2.line(imageColor, (320, 0), (320, 480), self.grey)
         cv2.line(imageColor, (0, 2409), (640, 240), self.grey)
@@ -110,12 +110,20 @@ class Blobtracker:
         px = .005
         outputy = py * erry
         outputx = px * errx
+
+        diffx = self.cx - self.cx0
+        diffy = self.cy - self.cy0
+        nval = math.sqrt(diffx**2 + diffy**2)
+        self.val = nval * .2 + self.val * .8
+        self.analogData.add((nval, self.val))
+        self.analogPlot.update(self.analogData)
         # print errx, erry
         self.driver.moveX(outputx)
         self.driver.moveY(outputy)
 
 def main(args):
     d = Driver()
+
     ic = Blobtracker(d)
     rospy.init_node('blobtracker')
     r = rospy.Rate(120) # 10hz
