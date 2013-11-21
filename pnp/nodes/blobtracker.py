@@ -9,17 +9,56 @@ from cv_bridge import CvBridge, CvBridgeError
 import cv2
 import numpy as np
 import math
+import serial
+import time
+import timeit
+import thread
+class Driver:
+    def __init__(self):
+        print('opening device...')
+        self.port =  serial.Serial(port='/dev/ttyACM0',
+                     baudrate=115200,
+                     bytesize=serial.EIGHTBITS,
+                     stopbits=serial.STOPBITS_ONE,
+                     timeout=0)
+        self.port.open()
+        time.sleep(3)
+        self.send('g91')
+        print('device initialized!')
+
+    def close(self):
+        self.port.close()
+
+    def send(self, str):
+        self.port.write(str + '\r\n')
+        self.port.flush()
+
+    def moveY(self, val):
+        self.send('g0 y' + str(val))
+
+    def moveX(self, val):
+        self.send('g0 x' + str(val))
+
+    def read(self):
+        self.port.read(self.port.inWaiting())
+
 
 class Blobtracker:
 
-    def __init__(self):
+    def __init__(self, driver):
         self.bridge = CvBridge()
+
         self.image_sub = rospy.Subscriber(
             "/camera/image_raw",
             Image,
             self.callback)
         self.grey = (200,200,200)
         self.tgrey = (127,127,127)
+        self.driver = driver
+        self.cx = 320
+        self.cy = 240
+        self.cx0 = 320
+        self.cy0 = 240
 
 
     def callback(self,data):
@@ -44,24 +83,54 @@ class Blobtracker:
                     best_cnt = cnt
             M = cv2.moments(best_cnt)
             cx,cy = int(M['m10']/M['m00']), int(M['m01']/M['m00'])
-            print cx, cy
+            # print cx, cy
             cv2.circle(imageColor,(cx,cy), 5, (255,0,0),-1)
             cv2.line(imageColor, (cx, 0), (cx, 480), self.tgrey)
             cv2.line(imageColor, (0, cy), (640, cy), self.tgrey)
+            self.cx0 = self.cx
+            self.cy0 = self.cy
+            self.cx = cx
+            self.cy = cy
+            diffx = self.cx - self.cx0
+            diffy = self.cy - self.cy0
+            if(np.abs(diffx) > 50 or np.abs(diffy) > 50):
+                print str(diffx) + "\t" + str (diffy)
+
+            
             
         cv2.line(imageColor, (320, 0), (320, 480), self.grey)
-        cv2.line(imageColor, (0, 240), (640, 240), self.grey)
+        cv2.line(imageColor, (0, 2409), (640, 240), self.grey)
         cv2.imshow("result", imageColor)
         cv2.waitKey(1)
 
+    def tick(self): 
+        erry = 320 - self.cx
+        errx = 240 - self.cy
+        py = -.005
+        px = .005
+        outputy = py * erry
+        outputx = px * errx
+        # print errx, erry
+        self.driver.moveX(outputx)
+        self.driver.moveY(outputy)
+
 def main(args):
-    ic = Blobtracker()
+    d = Driver()
+    ic = Blobtracker(d)
     rospy.init_node('blobtracker')
+    r = rospy.Rate(120) # 10hz
+    while not rospy.is_shutdown():
+        ic.tick()
+        d.read()
+        r.sleep()
+    '''
     try:
         rospy.spin()
     except KeyboardInterrupt:
         print "Shutting down"
+    '''
     cv.DestroyAllWindows()
+    d.close()
 
 if __name__ == '__main__':
     main(sys.argv)
