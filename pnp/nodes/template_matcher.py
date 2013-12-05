@@ -24,24 +24,19 @@ class TemplateMatcher:
         cv.SetMouseCallback("sobel", self.on_mouse, param = 'hi')
         self.tbounds = [(0,0), (100, 100)]
         self.template = cv2.imread('template.png', cv.CV_LOAD_IMAGE_GRAYSCALE)
-        # self.template = None
-        # self.template = np.array([
-        #     [1, 1, 0, -1, -1],
-        #     [1, 0, 0, 0, -1],
-        #     [0, 0, 0, 0, 0],
-        #     [-1, 0, 0, 0, 1],
-        #     [-1, -1, 0, 1, 1]],
-        #                  np.float32)
+        self.waiting = False
+
 
 
 
     def on_mouse(self,event, x, y, flag, param):
-        if(event == cv.CV_EVENT_LBUTTONUP):
+        if(event == cv.CV_EVENT_LBUTTONDOWN):
            self.tbounds[0] = (x,y)
-        if(event == cv.CV_EVENT_RBUTTONUP):
-           self.tbounds[1] = (x,y)
-        # if(event == cv.CV_EVENT_MBUTTONUP):
-        #    print x,y
+           self.waiting = True
+        if(event == cv.CV_EVENT_MOUSEMOVE) and self.waiting:
+            self.tbounds[1] = (x,y)
+        if(event == cv.CV_EVENT_LBUTTONUP):
+           self.waiting = False
 
     def do_sobel(self, image):
         grad_x = cv2.Sobel(np.asarray(image), cv2.CV_16S, 1, 0, ksize=3)
@@ -68,10 +63,15 @@ class TemplateMatcher:
         #     self.template = sobel[50:80, 170:230]
         tmpresult = cv2.matchTemplate(sobel, self.template, cv.CV_TM_SQDIFF_NORMED)
 
-        cv2.rectangle(sobel_color, self.tbounds[0], self.tbounds[1], (255,0,0))
+        if self.waiting:
+            cv2.rectangle(sobel_color, self.tbounds[0], self.tbounds[1], (255,0,0))
         cv2.imshow("sobel", sobel_color)
-        cv2.imshow("match", tmpresult)
-        cv2.imshow("template", self.template)
+        # result_color = cv2.cvtColor(tmpresult, cv.CV_GRAY2BGR)
+        # matches = sobel_color.copy()
+        matches = cv2.applyColorMap(np.asarray(tmpresult), cv2.COLORMAP_JET)
+        # print result_color.shape
+        cv2.imshow("match", matches)
+        # cv2.imshow("template", self.template)
         if cv2.waitKey(1) == 10:
             print "say cheese!"
             # print self.tbounds
