@@ -1,0 +1,6 @@
+<launch>
+    <node ns="usb_cam" name="uvc_camera_node" pkg="uvc_camera" type="camera_node" output="screen">
+        <rosparam file="$(find pnp)/cfg/lifecam-uvc.yaml"/>
+    </node>
+ </launch>
+
