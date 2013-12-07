@@ -49,6 +49,10 @@ class TemplateMatcher:
 
     def __init__(self, driver=None):
         self.bridge = CvBridge()
+        self.uvc_sub = rospy.Subscriber(
+            "/usb_cam/image_raw",
+            Image,
+            self.uvc_callback)
         self.image_sub = rospy.Subscriber(
             "/camera/image_raw",
             Image,
@@ -58,13 +62,35 @@ class TemplateMatcher:
         self.tbounds = [(0,0), (100, 100)]
         self.template = cv2.imread('template.png', cv.CV_LOAD_IMAGE_GRAYSCALE)
         self.waiting = False
+        self.uvc_frame = None
 
         self.driver = driver
         self.cx, self.cy = (320, 240)
 
         self.grey = (200,200,200)
         self.tgrey = (127,127,127)
+        self.video = cv2.VideoWriter()
+        self.video.open("tm-sobel.avi", cv.CV_FOURCC('F', 'M', 'P', '4'), 30, (640,480), True)
+
+        self.uvc_video = cv2.VideoWriter()
+        self.uvc_video.open("tm-uvc.avi", cv.CV_FOURCC('F', 'M', 'P', '4'), 30, (640,480), True)
+
+        self.conv_video = cv2.VideoWriter()
+        self.conv_video.open("tm-conv.avi", cv.CV_FOURCC('F', 'M', 'P', '4'), 30, (640,480), True)
+
+        self.original_video = cv2.VideoWriter()
+        self.original_video.open("tm-original.avi", cv.CV_FOURCC('F', 'M', 'P', '4'), 30, (640,480), True)
+
         # self.original_video = cv2.VideoWriter()
+
+    def uvc_callback(self, data):
+        try:
+            # print('uvc_callback')
+            cv_image = self.bridge.imgmsg_to_cv(data, "bgr8")
+            self.uvc_frame = np.asarray(cv_image)
+        except CvBridgeError, e:
+            print e
+
 
     def on_mouse(self,event, x, y, flag, param):
         if(event == cv.CV_EVENT_LBUTTONDOWN):
@@ -90,11 +116,12 @@ class TemplateMatcher:
             cv_image = self.bridge.imgmsg_to_cv(data, "passthrough")
         except CvBridgeError, e:
             print e
+        original = np.asarray(cv_image)
 
-        blurred = cv2.GaussianBlur(np.asarray(cv_image), (5,5), 3)
+        color_original = cv2.applyColorMap(original, cv2.COLORMAP_JET)
+        blurred = cv2.GaussianBlur(original, (5,5), 3)
         #cv.ShowImage("original", cv_image)
         sobel = self.do_sobel(blurred)
-        # colorsobel = cv2.applyColorMap(sobel, cv2.COLORMAP_JET)
         sobel_color = cv2.cvtColor(sobel, cv.CV_GRAY2BGR)
         
         # if self.template is None:
@@ -106,8 +133,11 @@ class TemplateMatcher:
 
         # result_color = cv2.cvtColor(tmpresult, cv.CV_GRAY2BGR)
         # matches = sobel_color.copy()
-        matches = cv2.cvtColor(tmpresult, cv.CV_GRAY2BGR)
-        # matches = cv2.applyColorMap(tmpresult, cv2.COLORMAP_JET)
+        # print tmpresult
+        tmpresult*=255.0
+        result = tmpresult.astype(np.uint8)
+        matches = cv2.applyColorMap(result, cv2.COLORMAP_JET)
+        matches = cv2.resize(matches, (640, 480))
         minVal, maxVal, minLoc, maxLoc = cv2.minMaxLoc(tmpresult)
         target = tuple(map(operator.add, (self.template.shape[1]/2, self.template.shape[0]/2), minLoc))
         # print target
@@ -119,8 +149,14 @@ class TemplateMatcher:
         cv2.line(sobel_color, (self.cx, 0), (self.cx, 480), self.tgrey)
         cv2.line(sobel_color, (0, self.cy), (640, self.cy), self.tgrey)
         cv2.imshow("sobel", sobel_color)
-        cv2.imshow("match", tmpresult)
-        self.tick()
+        cv2.imshow("match", matches)
+        cv2.imshow("uvc", self.uvc_frame)
+        if self.uvc_frame is not None:
+            self.video.write(sobel_color)
+            self.uvc_video.write(self.uvc_frame)
+            self.conv_video.write(matches)
+            self.original_video.write(color_original)
+        # self.tick()
         key = cv2.waitKey(1)
         # print key
         if key == 1048586:
@@ -133,8 +169,8 @@ class TemplateMatcher:
     def tick(self):
         erry = 320 - self.cx
         errx = 240 - self.cy
-        py = -.005
-        px = .005
+        py = -.004
+        px = .004
         outputy = py * erry
         outputx = px * errx
 
@@ -142,23 +178,40 @@ class TemplateMatcher:
             self.driver.moveX(outputx)
             self.driver.moveY(outputy)
 
+    def close(self):
+        self.video.release()
+        self.uvc_video.release()
+        self.conv_video.release()
+        self.original_video.release()
+
 def main(args):
     d = Driver()
+
+    rospy.init_node('template_matcher')
     # d = None
     ic = TemplateMatcher(d)
-    rospy.init_node('template_matcher')
 
-    r = rospy.Rate(60)
+    r = rospy.Rate(30)
     while not rospy.is_shutdown():
-        #ic.tick()
-        if d is not None:
-            d.read()
-        r.sleep()
-    try:
-        rospy.spin()
-    except KeyboardInterrupt:
-        print "Shutting down"
+        try:
+            ic.tick()
+            if d is not None:
+                d.read()
+            r.sleep()
+        except KeyboardInterrupt:
+            cv.DestroyAllWindows()
+            ic.close()
+            if d is not None:
+                d.close()
+            break
+    # try:
+    #     rospy.spin()
+    # except KeyboardInterrupt:
+    #     print "Shutting down"
     cv.DestroyAllWindows()
+    ic.close()
+    if d is not None:
+        d.close()
 
 if __name__ == '__main__':
     main(sys.argv)
