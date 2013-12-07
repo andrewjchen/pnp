@@ -1,0 +1,8 @@
+# Lifecam
+
+device: /dev/video1
+camera_info_url: package://hydraslam/cfg/cameras/lifecam.yaml
+width: 640
+height: 480
+fps: 60
+frame_id: usb_cam
