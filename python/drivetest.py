@@ -27,6 +27,10 @@ send('g0x10')
 send('g0y10')
 send('g0x-10')
 send('g0y-10')
+send('g0z10')
+send('g0z-10')
+send('g0e10')
+send('g0e-10')
 port.close()
 
 
