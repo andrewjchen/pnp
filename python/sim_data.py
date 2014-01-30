@@ -24,22 +24,22 @@ class dataset():
 		
 		self.marker = self.image[425:455, 25:100]
 
-	def step(self,direction):
+	def step(self,direction,step_size):
 
 		old_pt = self.current_pt.copy()
 		dt = 1 #Insert update rate
 
 		if direction == 'left':
-			self.current_pt[0,0] = self.current_pt[0,0] - 1
+			self.current_pt[0,0] = self.current_pt[0,0] - step_size
 
 		elif direction == 'right':
-			self.current_pt[0,0] = self.current_pt[0,0] + 1
+			self.current_pt[0,0] = self.current_pt[0,0] + step_size
 
 		elif direction == 'up':
-			self.current_pt[0,1] = self.current_pt[0,1] + 1
+			self.current_pt[0,1] = self.current_pt[0,1] + step_size
 
 		elif direction == 'down':
-			self.current_pt[0,1] = self.current_pt[0,1] - 1
+			self.current_pt[0,1] = self.current_pt[0,1] - step_size
 
 		if self.current_pt[0,0] < self.left:
 			self.current_pt[0,0] = self.left

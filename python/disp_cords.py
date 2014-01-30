@@ -3,6 +3,7 @@ import sys, pygame, os
 import numpy as np
 import sim_data
 import time
+import temp_match
 import cv, cv2
 
 def get_new_marks(marker_pos, input,cnt): 
@@ -37,7 +38,7 @@ def update_rect(data,params,bounds,edge_flag):
 def detect_edge(data,params,bounds,edge_flag):
     #Left ; Right ; Top ; Bottom
     #Find current edge searching for: 
-    marker_flag = 0
+    acquire_flag = 0
     i = 0
     while (i<3) and not np.isnan(bounds[i]):
         i += 1
@@ -59,12 +60,46 @@ def detect_edge(data,params,bounds,edge_flag):
                 edge_flag = 0 #Stop looking for edges
 
                 #Initialize Image Acquisition and Marker Search
-                marker_flag = 1;
+                acquire_flag = 1;
                 data.workspace = np.zeros([bounds[2]-bounds[3]+data.window[1],bounds[1]-bounds[0]+data.window[0],3])
                 
         data = update_rect(data,params,bounds,edge_flag)
 
-    return bounds, edge_flag, data, marker_flag
+    return bounds, edge_flag, data, acquire_flag
+
+def acquire_image(data,par,sweepup):
+    x = data.current_pt[0,0] - data.left
+    y = data.top - data.current_pt[0,1]
+    dx = data.window[0]/2
+    dy = data.window[1]/2
+    data.workspace[y:y+2*dy,x:x+2*dx,:] = data.image[y:y+2*dy, x:x+2*dx, :]
+
+    if sweepup:
+        if data.current_pt[0,1]<bounds[2]: #Sweep Up
+            data.step('up',3)
+        else: #Sweep left
+            for x in range(50):
+                data.step('left',1)
+            else: #Done going left
+                sweepup = 0
+    else:
+        if data.current_pt[0,1] > bounds[3]: 
+            data.step('down',3)
+        else:
+            for x in range(50):
+                data.step('left',1)
+            else: #Done going left
+                sweepup = 1
+    if data.current_pt[0,0]<bounds[0] and (data.current_pt[0,1]<bounds[2] or data.current_pt[0,1]>bounds[3]):
+        sweepup = 2 #Done. 
+
+    foo = data.workspace[data.window[0]:data.workspace.shape[0]-data.window[0], data.window[1]:data.workspace.shape[1]-data.window[1]]
+    foo1=np.zeros([foo.shape[1],foo.shape[0],3])
+    foo1[:,:,0] = foo[:,:,0].T
+    foo1[:,:,1] = foo[:,:,1].T
+    foo1[:,:,2] = foo[:,:,2].T
+    par.workspace[par.margin[0]+0.5*data.window[1]:par.margin[0]+data.workspace.shape[1]-1.5*data.window[1],par.margin[1]+0.5*data.window[0]:par.margin[1]+data.workspace.shape[0]-1.5*data.window[0],:] = foo1
+    return data, par, sweepup
 
 if __name__ == "__main__":
 
@@ -90,7 +125,7 @@ if __name__ == "__main__":
     edge_flag = 1 #Flag that indicates when edges are being searched for
     marker_flag = 0
     marker_cnt = 0
-
+    sweepup = 1
     #Game Loop
     while 1:
         #time.sleep(.001) 
@@ -112,75 +147,27 @@ if __name__ == "__main__":
         #Do edge detection
         if edge_flag:
             if edge_flag == 1:
-                data.step('left')
+                data.step('left',10)
             elif edge_flag ==2:
-                data.step('right')
+                data.step('right',10)
             elif edge_flag ==3:
-                data.step('up')
+                data.step('up',10)
             elif edge_flag ==4:
-                data.step('down')
-            bounds, edge_flag, data, marker_flag = detect_edge(data,par,bounds,edge_flag)
+                data.step('down',10)
+            bounds, edge_flag, data, acquire_flag = detect_edge(data,par,bounds,edge_flag)
 
         #Acquire Image: 
-        if marker_flag == 1:
-            x = data.current_pt[0,0] - data.left
-            y = data.top - data.current_pt[0,1]
-            dx = data.window[0]/2
-            dy = data.window[1]/2
-            data.workspace[y:y+2*dy,x:x+2*dx,:] = data.image[y:y+2*dy, x:x+2*dx, :]
-            print np.max(data.image[y:y+2*dy, x:x+2*dx, :])
-            #data.workspace = pygame.transform.smoothscale(data.workspace, data.workspace.shape)
-            try:
-                sweepup
-            except:
-                sweepup = 1
-
-            if sweepup:
-                if data.current_pt[0,1]<bounds[2]: #Sweep Up
-                    data.step('up')
-                    left_ind=0
-                else: #Sweep left
-                    for x in range(50):
-                        data.step('left')
-                    else: #Done going left
-                        sweepup = 0
-            else:
-                if data.current_pt[0,1] > bounds[3]: 
-                    data.step('down')
-                else:
-                    for x in range(50):
-                        data.step('left')
-                    else: #Done going left
-                        sweepup = 1
-
-
-        #Find markers in current image. 
-
-            # image = data.image[x:x+2*dx, y:y+2*dy] #compensates for margin around image, and window size. 
-            # img = image.astype('uint8')
-            # template = data.marker
-            # tmp = template.astype('uint8')
-            # w, h = template.shape[0:2]
-        #res = cv2.matchTemplate(img,tmp,5) #cv2.TM_CCOEFF_NORMED)
-
-
-            # for pt in zip(*loc[::-1]):
-            #     cv2.rectangle(img, pt, (pt[0] + w, pt[1] + h), (0,0,255), 2)
-            #     cv2.imwrite('res.png',img)
-
-        #Display workspace, as acquired
-        if marker_flag:
-            print 'par.work: ',par.workspace.shape, 'data.work: ',data.workspace.shape, 'par margin:', par.margin
-            foo = data.workspace[data.window[0]:data.workspace.shape[0]-data.window[0], data.window[1]:data.workspace.shape[1]-data.window[1]]
-            foo1=np.zeros([foo.shape[1],foo.shape[0],3])
-            foo1[:,:,0] = foo[:,:,0].T
-            foo1[:,:,1] = foo[:,:,1].T
-            foo1[:,:,2] = foo[:,:,2].T
-            par.workspace[par.margin[0]:par.margin[0]+data.workspace.shape[1]-2*data.window[1],par.margin[1]:par.margin[1]+data.workspace.shape[0]-2*data.window[0],:] = foo1
+        if acquire_flag == 1:
+            data, par, sweepup = acquire_image(data,par,sweepup)
             pygame.surfarray.blit_array(screen,par.workspace.astype(int)) 
             
+            if sweepup ==2:
+                acquire_flag = 0
+                marker_flag = 1
 
         #Plot markers
+        marker_pos = temp_match.get_markers(par.workspace.astype(int),template)
+
         if marker_cnt > 0:
             for m in np.arange(marker_pos.shape[0]):
                 pygame.draw.circle(screen, (255,0,0), (int(marker_pos[m][0]),int(marker_pos[m][1])), 20)
