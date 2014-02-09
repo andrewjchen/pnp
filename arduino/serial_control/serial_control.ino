@@ -173,6 +173,7 @@ void loop() {
     }
     t_interval = t_cmd/2;
     
+    /*
     Serial.print(", x_cmd: ");
     Serial.print(x_cmd);
     Serial.print(", y_cmd: ");
@@ -181,6 +182,7 @@ void loop() {
     Serial.print(z_cmd);
     Serial.print(", t_cmd: ");
     Serial.println(t_cmd);
+    */
     
 
     inString = ""; 
