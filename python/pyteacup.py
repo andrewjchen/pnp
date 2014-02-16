@@ -20,5 +20,8 @@ class PyTeacup:
         self.port.write(str + '\r\n')
         self.port.flush()
 
+    def close(self):
+        self.port.close()
+
     def cmd(self, x, y, z, t):
-        self.send('g0x{0}y{1}z{2}e{3}'.format(x,y,z,t))
+        self.send('g0x{0}y{1}z{2}e{3}'.format(y,-x,z,t))
