@@ -17,7 +17,8 @@ class ClickNavigator:
         self.driver = driver
         self.bridge = CvBridge()
         self.init_homography()
-        self.center = (self.xmax / 2, self.ymax/2)
+        #self.center = (self.xmax / 2, self.ymax/2)
+        self.center = (231, 368)
         self.pt = self.center
         cv.NamedWindow("rectified")
         cv.SetMouseCallback("rectified", self.on_mouse, param = 'hi')
@@ -60,8 +61,9 @@ class ClickNavigator:
     def on_mouse(self,event, x, y, flag, param):
         if(event == cv.CV_EVENT_LBUTTONUP):
             self.pt = (x,y)
+            print self.pt
             cmd = self.pt[0] - self.center[0], -(self.pt[1] - self.center[1])
-            print cmd
+            #print cmd
             if self.driver is not None:
                 self.driver.cmd(cmd[0]/10,cmd[1]/10,0,0)
 
@@ -74,6 +76,9 @@ class ClickNavigator:
         rectified = cv2.warpPerspective(original, self.h, (self.xmax, self.ymax))
         rectified_color = cv2.cvtColor(rectified, cv.CV_GRAY2BGR)
         cv2.circle(rectified_color, self.pt, 5, (0, 255, 0), -1)
+        cv2.line(rectified_color, (0, self.center[1]), (self.xmax, self.center[1]), (255, 0, 0))
+        cv2.line(rectified_color, (self.center[0], 0), (self.center[0], self.ymax), (255, 0, 0))
+        cv2.imshow("original", original)
         cv2.imshow("rectified", rectified_color)
         cv2.waitKey(1)
 
