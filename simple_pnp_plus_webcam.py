@@ -35,14 +35,14 @@ class parts_set():
           
 class pnp_head():
     def __init__(self):
-        self.pos = np.array([0,0])
+        #self.pos = np.array([0,0])
+        self.pos = np.array([int(np.random.random(1)*640), int(np.random.random(1)*480)])
         self.vel = np.array([0,0])
         self.set_target(np.array([300, 300]))
         self.part_picked = False
         self.edges_to_detect = np.array([1,1,1,1]) #L, R, U, D directions
         self.edges = np.zeros((4,2))
-        self.edge_color = np.array([ 84, 150,  19])
-        self.prev_color_detected = [0, 0] #Flag to indicate if edge has been detected[0], and for how long[1]
+        self.prev_edge_detected = [0, 0] #Flag to indicate if edge has been detected[0], and for how long[1]
 
     def tick(self):
         self.pos[0]+=self.vel[0]
@@ -69,62 +69,62 @@ class pnp_head():
         - scan left, right, up down
         - senses edge when camera sees color "self.edges_detected"
         '''
-        print self.edges_to_detect
-        color_detected = self.field_edge_color_detected(self.image)
+        #print self.edges_to_detect
+        edge_detected = self.field_edge_detected(self.image)
 
-        if color_detected and self.prev_color_detected[0]==0:
+        #Detect new edge: 
+        if edge_detected and self.prev_edge_detected[0]==0:
             #Set first '1' to zero in self.edges to detect
             ind = np.nonzero(self.edges_to_detect==1)[0][0]
             self.edges_to_detect[ind] = 0
             self.edges[ind,:] = self.pos
-            self.prev_color_detected[0] = 1
-            self.prev_color_detected[1] = 1
+            self.prev_edge_detected[0] = 1
+            self.prev_edge_detected[1] = 1
 
-        elif color_detected==0 and self.prev_color_detected[0]:
-            self.prev_color_detected[0] = 0
-            self.prev_color_detected[1] = 0
-        elif color_detected == self.prev_color_detected[0]:
-            self.prev_color_detected[1]+= 1
+        #Retreat from previous edge
+        elif edge_detected==0 and self.prev_edge_detected[0]:
+            self.prev_edge_detected[0] = 0
+            self.prev_edge_detected[1] = 0
+
+        #Count how long it has been since change
+        elif edge_detected == self.prev_edge_detected[0]:
+            self.prev_edge_detected[1]+= 1
 
         if self.edges_to_detect[0]:
-            self.target[0] = self.pos[0] - 1 #move in -x direction
+            self.target[0] = self.pos[0] - 2 #move in -x direction
             self.target[1] = self.pos[1]
 
         elif self.edges_to_detect[1]:
-            self.target[0] = self.pos[0] + 1 #move in +x direction
+            self.target[0] = self.pos[0] + 2 #move in +x direction
             self.target[1] = self.pos[1] 
 
         elif self.edges_to_detect[2]:
             self.target[0] = self.pos[0] #move in +y direction
-            self.target[1] = self.pos[1]  + 1
+            self.target[1] = self.pos[1]  + 2
 
         elif self.edges_to_detect[3]:
             self.target[0] = self.pos[0] #move in -y direction
-            self.target[1] = self.pos[1]  - 1
+            self.target[1] = self.pos[1]  - 2
         else:
             scanning_field_flag = 0
-
+        print self.target
         return scanning_field_flag
 
-    def field_edge_color_detected(self, camera_image):
+    def field_edge_detected(self, camera_image):
         '''
         Assume input is image input is in 640x480x3 np.ndarray
         '''
-        tolerance = 50
-        threshold = 100
-
-        #Find number of green pixels that ~match edge_color
-        diff = camera_image -  np.tile(self.edge_color,(camera_image.shape[0],camera_image.shape[1],1))
-        sum_diff = np.sum(abs(diff),axis=2)
-        sum_diff = np.reshape(sum_diff,(sum_diff.shape[0]*sum_diff.shape[1],))
-
-        ind = np.nonzero(sum_diff<= tolerance)[0]
-        if len(ind)>threshold:
-            color_detected = 1
+        #Template matching for future
+        #tmpresult = cv2.matchTemplate(camera_image, self.edge_blob, cv.CV_TM_SQDIFF_NORMED)
+        
+        #Super simple edge detection (if sum of pixels < certain value)
+        x = np.reshape(camera_image, (camera_image.shape[0]*camera_image.shape[1]*camera_image.shape[2],))
+        if np.mean(x/255.) < 0.2:
+            edge_detected = True 
         else:
-            color_detected = 0
-        return color_detected
+            edge_detected = False
 
+        return edge_detected
 
 def get_distance(c1, c2):
     return math.sqrt((c2[0]-c1[0])**2 + (c2[1]-c1[1])**2)
@@ -173,15 +173,15 @@ if __name__ == "__main__":
         cv.ShowImage("w1", frame)
 
         head.image = cv2array(frame)
+        #head.image = sppw.cv2array( cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
     
-
         #Scanning procedure:
         if scanning_field_flag:
-            print scanning_field_flag
             scanning_field_flag = head.scanning_field(scanning_field_flag)
 
         #When done, display markers:
         else:
+
         #Plot markers
             for pad in np.arange(pads.pads_pos.shape[0]):
                 pygame.draw.circle(screen, (255,0,0), (int(pads.pads_pos[pad][0]),int(pads.pads_pos[pad][1])), 20)
@@ -227,7 +227,13 @@ if __name__ == "__main__":
   
         #Display current pt
         pygame.draw.circle(screen, (0,0,0), (head_pos[0], head_pos[1]), 10)
-        
+
+        #Draw edges
+        pygame.draw.lines(screen,BLACK,True,[ (head.edges[0,0], head.edges[2,1]), 
+                                              (head.edges[0,0], head.edges[3,1]),
+                                              (head.edges[1,0], head.edges[3,1]),
+                                              (head.edges[1,0], head.edges[2,1])], 1)
+
         if current_select != -1:
 #            print current_select
             head.set_target(parts.parts_pos[current_select])
