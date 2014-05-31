@@ -2,7 +2,10 @@ import sys, pygame, os
 import numpy as np
 import math
 import cv, cv2
-  
+ 
+def get_distance(c1, c2):
+    return math.sqrt((c2[0]-c1[0])**2 + (c2[1]-c1[1])**2)
+
 def clamp(val, low, high):
     return min(max(low, val), high)
 
@@ -23,7 +26,8 @@ def cv2array(im):
          count=im.width*im.height*im.nChannels) 
     a.shape = (im.height,im.width,im.nChannels) 
     return a 
-  
+
+
 class pads_set():
     def __init__(self):
         self.pads_pos = 400*np.random.random((10,2))
@@ -63,12 +67,13 @@ class pnp_head():
     def place(self,parts):
         parts.parts_pos = np.vstack((parts.parts_pos, self.pos))
 
-    def scanning_field(self,scanning_field_flag):
+    def scanning_field(self,find_edges_flag):
         '''
         function that allows head to start in random position
         - scan left, right, up down
         - senses edge when camera sees color "self.edges_detected"
         '''
+        find_blobs_flag = 0
         #print self.edges_to_detect
         edge_detected = self.field_edge_detected(self.image)
 
@@ -77,7 +82,7 @@ class pnp_head():
             #Set first '1' to zero in self.edges to detect
             ind = np.nonzero(self.edges_to_detect==1)[0][0]
             self.edges_to_detect[ind] = 0
-            self.edges[ind,:] = self.pos
+            self.edges[ind,:] = self.pos - [32, 24]
             self.prev_edge_detected[0] = 1
             self.prev_edge_detected[1] = 1
 
@@ -106,9 +111,10 @@ class pnp_head():
             self.target[0] = self.pos[0] #move in -y direction
             self.target[1] = self.pos[1]  - 2
         else:
-            scanning_field_flag = 0
-        print self.target
-        return scanning_field_flag
+            find_edges_flag = 0
+            find_blobs_flag = 1
+
+        return find_edges_flag, find_blobs_flag
 
     def field_edge_detected(self, camera_image):
         '''
@@ -126,9 +132,25 @@ class pnp_head():
 
         return edge_detected
 
-def get_distance(c1, c2):
-    return math.sqrt((c2[0]-c1[0])**2 + (c2[1]-c1[1])**2)
-    
+    # def scanning_for_blobs(find_blobs_flag):
+    #     '''function to acquire camera image, look for blobs, 
+    #        if find blob add it to self.pads
+
+    #        first, go to top left corner of detected edge frame
+    #        then scan until fully cover edges 
+    #        '''
+    #     #pan to top left
+    #     self.target[0] = self.edges[0,0]
+    #     self.target[1] = self.edges[3,1]
+    #     self.moving = 1
+
+    #     if (self.pos == self.target):
+    #         self.moving=0
+
+        
+    #     return find_blobs_flag
+
+
   
 if __name__ == "__main__":
   
@@ -151,7 +173,7 @@ if __name__ == "__main__":
     clock = pygame.time.Clock()
 
     #Start by scanning field:
-    scanning_field_flag = 1
+    find_edges_flag = 1
   
     #Setup Camera Loop: 
     cv.NamedWindow("w1", cv.CV_WINDOW_AUTOSIZE)
@@ -176,8 +198,11 @@ if __name__ == "__main__":
         #head.image = sppw.cv2array( cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY))
     
         #Scanning procedure:
-        if scanning_field_flag:
-            scanning_field_flag = head.scanning_field(scanning_field_flag)
+        if find_edges_flag:
+            find_edges_flag, find_blobs_flag = head.scanning_field(find_edges_flag)
+        
+        # if find_blobs_flag:
+        #     find_blobs_flag = head.scanning_for_blobs(find_blobs_flag)
 
         #When done, display markers:
         else:
@@ -226,7 +251,7 @@ if __name__ == "__main__":
         head_pos = head.get_current_pos().astype(int)
   
         #Display current pt
-        pygame.draw.circle(screen, (0,0,0), (head_pos[0], head_pos[1]), 10)
+        pygame.draw.rect(screen, BLACK, (head_pos[0]-32, head_pos[1]-24, 64, 48), 1)
 
         #Draw edges
         pygame.draw.lines(screen,BLACK,True,[ (head.edges[0,0], head.edges[2,1]), 
