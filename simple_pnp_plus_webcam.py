@@ -2,6 +2,7 @@ import sys, pygame, os
 import numpy as np
 import math
 import cv, cv2
+from sklearn.cluster import Kmeans
  
 def get_distance(c1, c2):
     return math.sqrt((c2[0]-c1[0])**2 + (c2[1]-c1[1])**2)
@@ -41,12 +42,16 @@ class pnp_head():
     def __init__(self):
         #self.pos = np.array([0,0])
         self.pos = np.array([int(np.random.random(1)*640), int(np.random.random(1)*480)])
+        #Convention: center of camera is self.pos
+
         self.vel = np.array([0,0])
         self.set_target(np.array([300, 300]))
         self.part_picked = False
         self.edges_to_detect = np.array([1,1,1,1]) #L, R, U, D directions
         self.edges = np.zeros((4,2))
         self.prev_edge_detected = [0, 0] #Flag to indicate if edge has been detected[0], and for how long[1]
+        self.part_blob = cv2.imread('part.png')
+        self.blob_thresh = 0.8 #Template matching threshold
 
     def tick(self):
         self.pos[0]+=self.vel[0]
@@ -75,7 +80,7 @@ class pnp_head():
         '''
         find_blobs_flag = 0
         #print self.edges_to_detect
-        edge_detected = self.field_edge_detected(self.image)
+        edge_detected = self.field_edge_detected()
 
         #Detect new edge: 
         if edge_detected and self.prev_edge_detected[0]==0:
@@ -116,10 +121,11 @@ class pnp_head():
 
         return find_edges_flag, find_blobs_flag
 
-    def field_edge_detected(self, camera_image):
+    def field_edge_detected(self):
         '''
         Assume input is image input is in 640x480x3 np.ndarray
         '''
+        camera_image = self.image
         #Template matching for future
         #tmpresult = cv2.matchTemplate(camera_image, self.edge_blob, cv.CV_TM_SQDIFF_NORMED)
         
@@ -132,25 +138,54 @@ class pnp_head():
 
         return edge_detected
 
-    # def scanning_for_blobs(find_blobs_flag):
-    #     '''function to acquire camera image, look for blobs, 
-    #        if find blob add it to self.pads
+    def scanning_for_blobs(self, find_blobs_flag):
+        '''function to acquire camera image, look for blobs, 
+           if find blob add it to self.pads
 
-    #        first, go to top left corner of detected edge frame
-    #        then scan until fully cover edges 
-    #        '''
-    #     #pan to top left
-    #     self.target[0] = self.edges[0,0]
-    #     self.target[1] = self.edges[3,1]
-    #     self.moving = 1
+           first, go to top left corner of detected edge frame
+           then scan until fully cover edges 
+           '''
+        #pan to top left
+        self.target[0] = self.edges[0,0]
+        self.target[1] = self.edges[3,1]
+        self.starting_sweep = 1
 
-    #     if (self.pos == self.target):
-    #         self.moving=0
+        if (self.pos == self.target):
+            self.starting_sweep=0
 
+        #wait to get to top-left corner
+        while self.starting_sweep:
+            return find_blobs_flag
+
+        #Now alternate between sweeping right, move down by .75 height of camera, sweep left
+
+        #Extract_blobs
+
+
+    def extract_blobs(self):
+        '''use blob tracking to find parts in field of view'''
+        camera_image = self.image
+        tmpresult = cv2.matchTemplate(camera_image, self.part_blob, cv.CV_TM_SQDIFF_NORMED)
+
+        #Threshold tmpresult
+        blob_pos = np.array([i for i,match in enumerate(tmpresult.flat) if match > self.blob_thresh])
+
+        #Translate to camera (x,y) coordinates
+        blob_pos_x = blob_pos/tmpresult.shape[1]
+        blob_pos_y = blob_pos - (blob_pos_x*tmpresult.shape[1])
         
-    #     return find_blobs_flag
+        #Account for edges
+        blob_pos_x = blob_pos_x + int(0.5*self.part_blob.shape[0])
+        blob_pos_y = blob_pos_x + int(0.5*self.part_blob.shape[1])
 
+        #Cluster Points with Kmeans 
+        LL = np.array(( 5, ))
+        for i in range(LL.shape[0]):
+            clf = Kmeans(n_clusters=i)
+            clf.fit(np.vstack(( np.array([blob_pos_x]), np.array([blob_pos_y]) )))
 
+            LL[i] = log likelihood of kmeans fit. 
+        #Translate to workspace
   
 if __name__ == "__main__":
   
