@@ -10,6 +10,7 @@ import pygame
 import numpy as np
 import time
 import math
+import random
 
 def sumClip(arr, lower, upper):
     mag=math.sqrt(arr[0]**2 + arr[1]**2)
@@ -108,6 +109,20 @@ class pnp_head():
         rel=target-self.pos
 #        print rel
         self.cmd(rel[0], rel[1])
+        
+def get_distance(c1, c2):
+    return math.sqrt((c2[0]-c1[0])**2 + (c2[1]-c1[1])**2)
+    
+def select_part(parts, pos):
+    best_dist = 9999
+    best_part = None
+    for i,p in enumerate(parts):
+        dist =get_distance(pos, (p[0], p[1]))
+        if dist < best_dist:
+            best_part = i
+            best_dist = dist
+    return best_part if best_dist < 100 else -1
+
 
 pygame.init()
 screen = pygame.display.set_mode((640+640, 640))
@@ -116,8 +131,13 @@ head=pnp_head()
 
 prev_time=time.time()
 
-points = []
-print type(points)
+parts = []
+for i in range(100):
+    parts.append(np.array([random.random()*50,
+                           random.random()*50, 1]))
+#parts.append(np.array([10,12,1]))
+#parts.append(np.array([10,8,1]))
+current_select=0
 while True:
     cur_time=time.time()
     dt=cur_time - prev_time
@@ -170,15 +190,22 @@ while True:
         if event.type == pygame.MOUSEBUTTONUP:
             pos = pygame.mouse.get_pos()
             if is_workspace(pos):
+                realp = real(np.array(pos))
                 if event.button == 1:
-                    realp = real(np.array(pos))
                     print pos, realp
                     head.set_target(realp)
+                if event.button == 3:
+                    selection= select_part(parts, realp)
+                    if selection is not -1:
+                        current_select = selection
             else:
                 if event.button == 1:
                     cam_realp = cam_real(np.array(pos))
                     realp=head.pos + cam_realp
                     print realp
+        if event.type == pygame.KEYUP:
+            if event.key == pygame.K_RETURN:
+                head.set_target(parts[current_select])
     
     # head tick
     head.tick(dt)    
@@ -209,6 +236,21 @@ while True:
 #    print points
     pygame.draw.polygon(screen, (200,200,200),(ap,bp,cp,dp), 1)
     
+    # draw the parts (red dots)
+    for part in parts:
+        stage_pos=pixel(part)
+        cam_pos=cam_pixel(part-head.pos)
+        pygame.draw.circle(screen, (255,0,0), (int(stage_pos[0]), int(stage_pos[1])), 5)
+        if cam_pos[0]> 640 and cam_pos[1] < 480:
+            pygame.draw.circle(screen, (255,0,0), (int(cam_pos[0]), int(cam_pos[1])), 5)
+            
+    #draw currently selected part
+    if current_select is not -1:
+        stage_pos=pixel(parts[current_select])
+        cam_pos=cam_pixel(parts[current_select]-head.pos)
+        pygame.draw.circle(screen, (0,255,0), (int(stage_pos[0]), int(stage_pos[1])), 5)
+        if cam_pos[0]> 640 and cam_pos[1] < 480:
+            pygame.draw.circle(screen, (0,255,0), (int(cam_pos[0]), int(cam_pos[1])), 5)
 #    pygame.draw.rect(screen, (200, 200, 200), (int(head_pos[0]-80), int(head_pos[1]-60), 160, 120), 1)
     
 
