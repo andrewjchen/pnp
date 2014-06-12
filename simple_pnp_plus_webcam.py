@@ -2,7 +2,9 @@ import sys, pygame, os
 import numpy as np
 import math
 import cv, cv2
-from sklearn.cluster import Kmeans
+# from sklearn.cluster import Kmeans
+# from sklearn.mixture import GMM
+import scipy.spatial as scispat
  
 def get_distance(c1, c2):
     return math.sqrt((c2[0]-c1[0])**2 + (c2[1]-c1[1])**2)
@@ -30,18 +32,28 @@ def cv2array(im):
 
 
 class pads_set():
-    def __init__(self):
-        self.pads_pos = 400*np.random.random((10,2))
-        self.screen_size = (640, 480)
- 
+    def __init__(self,edges):
+
+        tmp = np.hstack(( (edges[1,0]-edges[0,0])*np.random.random((10,1)),
+         (edges[2,1]-edges[3,1])*np.random.random((10,1)) )) 
+
+        #Middle of Workspace, if workspace top left is [0,0]
+        #mean_pt = np.array([ (edges[1,0] - edges[0,0])/2, (edges[2,1] - edges[3,1])/2 ]) + np.array([])
+        mean_pt = np.array( [edges[0,0], edges[3,1]] )
+        self.pads_pos = tmp + np.tile(mean_pt,(tmp.shape[0], 1))
+        print 'edges',edges
+        print 'tmp',tmp
+        print 'mean_pt',mean_pt
+        print 'pads',tmp + np.tile(mean_pt,(tmp.shape[0], 1))
+        
 class parts_set():
-    def __init__(self):
+    def __init__(self,edges):
         self.parts_pos = 400*np.random.random((10,2))
           
 class pnp_head():
     def __init__(self):
-        #self.pos = np.array([0,0])
-        self.pos = np.array([int(np.random.random(1)*640), int(np.random.random(1)*480)])
+        self.pos = np.array([320,240])
+        #self.pos = np.array([int(np.random.random(1)*640), int(np.random.random(1)*480)])
         #Convention: center of camera is self.pos
 
         self.vel = np.array([0,0])
@@ -52,12 +64,14 @@ class pnp_head():
         self.prev_edge_detected = [0, 0] #Flag to indicate if edge has been detected[0], and for how long[1]
         self.part_blob = cv2.imread('part.png')
         self.blob_thresh = 0.8 #Template matching threshold
+        self.screen_size = (640, 480)
+        self.stat_target = [0,0]
 
     def tick(self):
         self.pos[0]+=self.vel[0]
         self.pos[1]+=self.vel[1]
-        self.vel[0] = clamp((self.target[0]-self.pos[0]), -2, 2)
-        self.vel[1] = clamp((self.target[1]-self.pos[1]), -2, 2)
+        self.vel[0] = clamp((self.target[0]-self.pos[0]), -20, 20)
+        self.vel[1] = clamp((self.target[1]-self.pos[1]), -20, 20)
    
     def get_current_pos(self):
 #        self.pos = self.pos + 1*np.random.random((2,))
@@ -101,20 +115,20 @@ class pnp_head():
             self.prev_edge_detected[1]+= 1
 
         if self.edges_to_detect[0]:
-            self.target[0] = self.pos[0] - 2 #move in -x direction
+            self.target[0] = self.pos[0] - 10 #move in -x direction
             self.target[1] = self.pos[1]
 
         elif self.edges_to_detect[1]:
-            self.target[0] = self.pos[0] + 2 #move in +x direction
+            self.target[0] = self.pos[0] + 10 #move in +x direction
             self.target[1] = self.pos[1] 
 
         elif self.edges_to_detect[2]:
             self.target[0] = self.pos[0] #move in +y direction
-            self.target[1] = self.pos[1]  + 2
+            self.target[1] = self.pos[1]  + 10
 
         elif self.edges_to_detect[3]:
             self.target[0] = self.pos[0] #move in -y direction
-            self.target[1] = self.pos[1]  - 2
+            self.target[1] = self.pos[1]  - 10
         else:
             find_edges_flag = 0
             find_blobs_flag = 1
@@ -144,23 +158,61 @@ class pnp_head():
 
            first, go to top left corner of detected edge frame
            then scan until fully cover edges 
-           '''
+         
+          '''
+        print find_blobs_flag
         #pan to top left
-        self.target[0] = self.edges[0,0]
-        self.target[1] = self.edges[3,1]
-        self.starting_sweep = 1
+        if find_blobs_flag == 1:
+            self.target[0] = self.edges[0,0]
+            self.target[1] = self.edges[3,1]
 
-        if (self.pos == self.target):
-            self.starting_sweep=0
+            if np.sum((self.pos - self.target)**2) < 10:
+                find_blobs_flag = 2 #Code for sweeping right
 
         #wait to get to top-left corner
-        while self.starting_sweep:
-            return find_blobs_flag
+        if find_blobs_flag == 2:
+            self.target[0] = self.pos[0] + 10
+            self.target[1] = self.pos[1]
+
+            if self.target[0] > self.edges[3,0]:
+                find_blobs_flag = 3 #Code for moving down
+                self.foo = 1
+                self.prev_blobs_flag = 2
+
+        if find_blobs_flag == 3:
+            if self.foo:
+                self.stat_target[0] = self.pos[0]
+                self.stat_target[1] = self.pos[1] + 50
+                self.foo = 0
+
+            self.target[0] = self.stat_target[0]
+            self.target[1] = self.stat_target[1] 
+
+            if np.sum((self.pos - self.target)**2) < 10:
+                if self.prev_blobs_flag == 2:
+                    find_blobs_flag = 4
+                elif self.prev_blobs_flag == 4:
+                    find_blobs_flag = 2
+
+        if find_blobs_flag == 4:
+            self.target[0] = self.pos[0] - 10
+            self.target[1] = self.pos[1]
+
+            if self.target[0] < self.edges[0,0]:
+                find_blobs_flag = 3 #Code for moving down
+                self.foo = 1
+                self.prev_blobs_flag = 4
+
+        if self.pos[1] > self.edges[2,1]:
+            find_blobs_flag = 0
+
+        return find_blobs_flag
 
         #Now alternate between sweeping right, move down by .75 height of camera, sweep left
 
-        #Extract_blobs
 
+        #Extract_blobs
+        self.extract_blobs()
 
     def extract_blobs(self):
         '''use blob tracking to find parts in field of view'''
@@ -168,24 +220,37 @@ class pnp_head():
         tmpresult = cv2.matchTemplate(camera_image, self.part_blob, cv.CV_TM_SQDIFF_NORMED)
 
         #Threshold tmpresult
-        blob_pos = np.array([i for i,match in enumerate(tmpresult.flat) if match > self.blob_thresh])
+        blob_pos = np.array([i for i,match in enumerate(tmpresult.flat) if match < self.blob_thresh])
 
         #Translate to camera (x,y) coordinates
         blob_pos_x = blob_pos/tmpresult.shape[1]
         blob_pos_y = blob_pos - (blob_pos_x*tmpresult.shape[1])
-        
-        #Account for edges
-        blob_pos_x = blob_pos_x + int(0.5*self.part_blob.shape[0])
-        blob_pos_y = blob_pos_x + int(0.5*self.part_blob.shape[1])
 
-        #Cluster Points with Kmeans 
-        LL = np.array(( 5, ))
-        for i in range(LL.shape[0]):
-            clf = Kmeans(n_clusters=i)
-            clf.fit(np.vstack(( np.array([blob_pos_x]), np.array([blob_pos_y]) )))
+        # #Account for edges
+        # blob_pos_x = blob_pos_x + int(0.5*self.part_blob.shape[0])
+        # blob_pos_y = blob_pos_x + int(0.5*self.part_blob.shape[1])
+        blob_comb_pos = np.vstack(( np.array([blob_pos_x]), np.array([blob_pos_y]) )).T
 
-            LL[i] = log likelihood of kmeans fit. 
-        #Translate to workspace
+        #Assume size of part is about 20x20 pixels: 
+        #Calculate distance matrix: 
+        tmp = scispat.distance.pdist(blob_comb_pos)
+        pt_dist = scispat.distance.squareform(tmp)
+
+        for i,pt in enumerate(blob_comb_pos):
+            if 'part_list' in locals():
+                if np.all(pt_dist[i,part_list] > 20): 
+                    part_list.extend([i])
+            else:
+                part_list = [i]
+
+        #Translate to workspace coordinates: 
+        parts = blob_comb_pos[part_list,:] 
+
+        #Translate to workspace coordinates:
+        #Frame (set (0,0) to be center)
+        parts = parts - np.tile(np.array([480/2, 640/2]), (parts.shape[0],1) )
+        parts = parts + np.tile(self.pos, (parts.shape[0],1) )
+        self.parts = np.vstack((self.parts, parts))
   
 if __name__ == "__main__":
   
@@ -194,14 +259,14 @@ if __name__ == "__main__":
     WHITE = 255, 255, 255
 
     #Initialize faux pads / parts (replace with blob tracking later)
-    pads = pads_set()
-    parts = parts_set()
+    # pads = pads_set()
+    # parts = parts_set()
 
     #Initialize head
     head = pnp_head()
 
     #Set Display
-    screen = pygame.display.set_mode(pads.screen_size) #Same as camera width
+    screen = pygame.display.set_mode(head.screen_size) #Same as camera width
     pygame.display.set_caption("pnp display current position")
   
     #Initialize Clock
@@ -236,25 +301,25 @@ if __name__ == "__main__":
         if find_edges_flag:
             find_edges_flag, find_blobs_flag = head.scanning_field(find_edges_flag)
         
-        # if find_blobs_flag:
-        #     find_blobs_flag = head.scanning_for_blobs(find_blobs_flag)
-
         #When done, display markers:
         else:
-
+            if 'pads' not in locals():
+                pads = pads_set(head.edges)
+                parts = parts_set(head.edges)
         #Plot markers
             for pad in np.arange(pads.pads_pos.shape[0]):
-                pygame.draw.circle(screen, (255,0,0), (int(pads.pads_pos[pad][0]),int(pads.pads_pos[pad][1])), 20)
+                pygame.draw.circle(screen, (255,0,0), (int(pads.pads_pos[pad][0]),int(pads.pads_pos[pad][1])), 5)
              
-            for par in np.arange(parts.parts_pos.shape[0]):
-                pygame.draw.circle(screen, (0,255,0), (int(parts.parts_pos[par][0]),int(parts.parts_pos[par][1])), 20)
+            # for par in np.arange(parts.parts_pos.shape[0]):
+            #     pygame.draw.circle(screen, (0,255,0), (int(parts.parts_pos[par][0]),int(parts.parts_pos[par][1])), 20)
              
-          
+        if find_blobs_flag:
+            find_blobs_flag = head.scanning_for_blobs(find_blobs_flag)
+
             #Check for clicks:
             ev = pygame.event.get()
     #        pos=(0,0)
             for event in ev:
-    #            print event
                 if event.type == pygame.MOUSEBUTTONUP:
                     
                     pos = pygame.mouse.get_pos()
