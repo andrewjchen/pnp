@@ -11,6 +11,7 @@ import numpy as np
 import time
 import math
 import random
+import cv, cv2
 
 def sumClip(arr, lower, upper):
     mag=math.sqrt(arr[0]**2 + arr[1]**2)
@@ -30,6 +31,8 @@ to_cam_real=np.matrix([[1., 0, -(640.+320.)],
                     [0, -1., 240*1.],
                     [0,0,cam_scale]])
 to_cam_pixel=np.linalg.inv(to_cam_real)
+
+
 def real(pixels):
     ''' given pixel coordinates in the window, returns the position in 
     real space.
@@ -83,6 +86,29 @@ def cam_pixel(rcoords):
 def is_workspace(point):
     return point[0] < 640
 
+#Vision functions
+def cvimage_to_pygame(image):
+    """Convert cvimage into a pygame image"""
+    return pygame.image.frombuffer(image.tostring(), image.shape[1::-1],
+                                   "RGB")
+def cv2array(im): 
+    depth2dtype = { 
+        cv.IPL_DEPTH_8U: 'uint8', 
+        cv.IPL_DEPTH_8S: 'int8', 
+        cv.IPL_DEPTH_16U: 'uint16', 
+        cv.IPL_DEPTH_16S: 'int16', 
+        cv.IPL_DEPTH_32S: 'int32', 
+        cv.IPL_DEPTH_32F: 'float32', 
+        cv.IPL_DEPTH_64F: 'float64', 
+    } 
+
+    arrdtype=im.depth 
+    a = np.fromstring( im.tostring(), 
+         dtype=depth2dtype[im.depth], 
+         count=im.width*im.height*im.nChannels) 
+    a.shape = (im.height,im.width,im.nChannels) 
+    return a
+
 class pnp_head():
     def __init__(self):
         self.cnc = None
@@ -123,6 +149,9 @@ def select_part(parts, pos):
             best_dist = dist
     return best_part if best_dist < 100 else -1
 
+#Setup camera acquisition
+camera_index = 0
+vc = cv2.VideoCapture(camera_index)
 
 pygame.init()
 screen = pygame.display.set_mode((640+640, 640))
@@ -207,6 +236,12 @@ while True:
             if event.key == pygame.K_RETURN:
                 head.set_target(parts[current_select])
     
+    ## Acquire new camera image: 
+    retval, frame = vc.read()
+    #head.image = cv2array(frame) #np.array
+    cam_im = cvimage_to_pygame(frame)
+    screen.blit(cam_im,(640,0))
+
     # head tick
     head.tick(dt)    
     
