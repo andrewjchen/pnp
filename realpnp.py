@@ -237,8 +237,8 @@ while True:
                 head.set_target(parts[current_select])
     
     ## Acquire new camera image: 
+    
     retval, frame = vc.read()
-    #head.image = cv2array(frame) #np.array
     cam_im = cvimage_to_pygame(frame)
     screen.blit(cam_im,(640,0))
 
@@ -271,6 +271,7 @@ while True:
 #    print points
     pygame.draw.polygon(screen, (200,200,200),(ap,bp,cp,dp), 1)
     
+
     # draw the parts (red dots)
     for part in parts:
         stage_pos=pixel(part)
